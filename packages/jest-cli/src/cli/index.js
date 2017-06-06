@@ -10,6 +10,7 @@
 
 import type {Path} from 'types/Config';
 import type {Argv} from 'types/Argv';
+import type {AggregatedResult} from 'types/TestResult';
 
 const {validateCLIOptions} = require('jest-util');
 const yargs = require('yargs');
@@ -17,7 +18,11 @@ const args = require('./args');
 const getJest = require('./getJest');
 const runCLI = require('./runCLI');
 
-function run(argv?: Argv, project?: Path) {
+function run(
+  argv?: Argv,
+  project?: Path,
+  onComplete?: (results: ?AggregatedResult) => void,
+) {
   argv = yargs(argv || process.argv.slice(2))
     .usage(args.usage)
     .help()
@@ -28,7 +33,10 @@ function run(argv?: Argv, project?: Path) {
 
   validateCLIOptions(argv, args.options);
 
-  if (!project) {
+  if (typeof project === 'function') {
+    onComplete = project;
+    project = process.cwd();
+  } else if (!project) {
     project = process.cwd();
   }
 
@@ -38,10 +46,14 @@ function run(argv?: Argv, project?: Path) {
 
   const execute = argv.projects.length === 1 ? getJest(project).runCLI : runCLI;
   execute(argv, argv.projects, result => {
-    const code = !result || result.success ? 0 : 1;
-    process.on('exit', () => process.exit(code));
-    if (argv && argv.forceExit) {
-      process.exit(code);
+    if (typeof onComplete === 'function') {
+      onComplete(result);
+    } else {
+      const code = !result || result.success ? 0 : 1;
+      process.on('exit', () => process.exit(code));
+      if (argv && argv.forceExit) {
+        process.exit(code);
+      }
     }
   });
 }
